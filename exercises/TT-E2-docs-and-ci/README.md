@@ -1,39 +1,133 @@
-# TT-E2: Docs and CI
+# TT-E2 — Docs & Continuous Integration
 
-**Timetable slot:** Tools and Techniques **E2** (60 minutes)
+**Continuous Integration and ROOT Data Analysis with ATLAS Open Data**
 
-This exercise is about producing course materials that are reproducible: documentation that builds, and CI that enforces it.
+---
 
-## Learning objectives
+You can learn how to:
 
-By the end you can:
+* Connect analysis code, input data, and automated workflows using **GitHub Actions**.
+* Modify selection cuts and observe how CI triggers new plots.
+* Understand how CI/CD ensures **reproducibility and transparency** in physics analyses.
 
-- Build and serve the course docs locally with MkDocs
-- Add a new docs page and wire it into `mkdocs.yml`
-- Understand what a “Docs” CI job should validate
+This exercise extends the concepts from the *“From My Code to Our Code”* lecture:
 
-## Timebox plan (60 min)
+> “If CI passes, your result is production-ready.”
 
-- 0–10: install MkDocs and verify `mkdocs build`
-- 10–30: write one new documentation page
-- 30–45: add to navigation and verify locally (`mkdocs build`)
-- 45–60: push and confirm CI status (or at least that the workflow would pass)
+---
 
-## Success criteria
+### Repository Structure
 
-- `mkdocs build` succeeds locally
-- Your new page appears in the nav
-- CI “Docs” job is green for your branch/PR
+All relevant files live in:
 
-## Local docs workflow
-
-```bash
-python3 -m pip install --break-system-packages mkdocs mkdocs-material
-mkdocs build
-mkdocs serve
+```
+exercises/TT-E2-docs-and-ci/ci-parallel-root/
 ```
 
-## Suggested page topics (choose one)
-* Troubleshooting: common CMake/sanitizer failures
-* "How to read sanitizer reports" (short + examples)
-* "How to run benchmarks and interpret results"
+Inside, you’ll find:
+
+| File / Folder                                           | Purpose                                                                                              |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `data.csv`, `mc.csv`                                    | Lists of ROOT files (real and simulated). Each line is one file URL.                                 |
+| `gamma-gamma-analysis-v1.py`                            | Python analysis script — processes a ROOT file, applies photon cuts, produces histograms.            |
+| `root-to-png.py`                                        | Converts merged ROOT histograms to PNG images.                                                       |
+| `plots/`                                                | Output folder where the Action saves plots. Contains a `.gitkeep` file to keep the directory in Git. |
+| `.github/workflows/process-atlas-root-open-data-v2.yml` | CI workflow that automates the full analysis.                                                        |
+
+---
+
+### How the Workflow Works
+
+1. **Trigger**
+
+   * Manually via *Actions > Run workflow* (default input: `data.csv`).
+   * Automatically every **10 hours** (`schedule` trigger).
+   * Automatically on any push changing:
+
+     * `data.csv`, `mc.csv`
+     * `gamma-gamma-analysis-v1.py`
+     * `root-to-png.py`
+     * or the workflow YAML itself.
+
+2. **Setup job**
+
+   * Reads the CSV file line-by-line and creates a job matrix: one ROOT file per job.
+   * Extracts a short name (e.g. `data`, `mc`) from the filename.
+
+3. **Parallel analysis**
+
+   * Runs in **Docker** using the `rootproject/root:latest` image.
+   * Executes:
+
+     ```bash
+     python3 gamma-gamma-analysis-v1.py <ROOT file URL>
+     ```
+   * Each job produces:
+
+     * `plots/histogram_<sample>.png`
+     * `plots/histogram_<sample>.root`
+   * These are uploaded as CI artifacts.
+
+4. **Merge and publish**
+
+   * Collects all individual histograms.
+   * Merges them via ROOT’s `hadd`.
+   * Converts the merged `.root` file to `.png`.
+   * Commits both into the repository under `plots/`.
+
+---
+
+### What Students Should Do
+
+#### 1. Modify the Analysis
+
+Open `gamma-gamma-analysis-v1.py` and adjust:
+
+* Photon **pT threshold**, η range, or isolation criteria.
+* The histogram binning or range.
+  Commit and push — the CI will automatically re-run and update plots.
+
+#### 2. Experiment with Data Files
+
+Edit `data.csv` or `mc.csv`:
+
+* Add or remove ROOT file URLs.
+* Swap between real data and MC samples.
+
+Each change triggers a fresh CI run and new plots appear in `plots/`.
+
+#### 3. Observe CI Behavior
+
+Go to the **Actions** tab and watch jobs execute in parallel:
+
+* Setup → process each file → merge results → push new plots.
+
+Open the updated PNGs under
+`exercises/TT-E2-docs-and-ci/ci-parallel-root/plots/`
+to see how your cuts affect the final distributions.
+
+#### 4. Optional: Tune Triggers
+
+Open `.github/workflows/process-atlas-root-open-data-v2.yml` and:
+
+* Adjust the cron expression (`"0 */10 * * *"`) to run more or less often.
+* Add or remove files from the `paths:` list under `push:` to control automatic triggers.
+
+---
+
+### Learning Outcomes
+
+By completing this exercise, you will:
+
+* Understand **continuous integration as part of scientific analysis**.
+* Learn to **automate data pipelines** with GitHub Actions.
+* Recognize the value of **reproducibility** — every change is versioned, tested, and documented.
+* Produce real physics plots using ATLAS Open Data, generated by CI.
+
+---
+
+### Notes
+
+* If no plots appear, check **Actions > Run logs > merge-and-publish**.
+* Use the default data first (`data.csv`), then test with `mc.csv`.
+* You can re-run any workflow from the web interface to compare results.
